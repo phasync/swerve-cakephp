@@ -1,0 +1,116 @@
+# 2026-09-28T16:13Z Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz, 56 threads
+# PHP 8.5.11, CakePHP 5.4.2, swerve 0.1.0-alpha12, phasync-ext 0.5.0-alpha8, 4 workers
+### php-fpm 4 children /bench/json
+HTTP/1.1 200 OK
+Server: nginx/1.24.0 (Ubuntu)
+Date: Mon, 28 Sep 2026 16:13:14 GMT
+Content-Type: application/json
+Transfer-Encoding: chunked
+Connection: keep-alive
+X-Powered-By: PHP/8.5.11
+Set-Cookie: csrfToken=l5Zbkgj2R54CzcMsu4WTZzE2YTNiYjE1NmIzMTVmY2IwNmE1ZjI3OGMzOTczZDY5NTdlZjhiNzU%3D; path=/; HttpOnly
+
+{"hello":"world"}
+Running 10s test @ http://127.0.0.1:18860/bench/json
+  4 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    27.05ms    3.96ms  98.88ms   98.59%
+    Req/Sec   595.92     63.46   646.00     87.25%
+  23743 requests in 10.02s, 7.84MB read
+Requests/sec:   2368.64
+Transfer/sec:    801.03KB
+### php-fpm 4 children /bench/session
+HTTP/1.1 200 OK
+Server: nginx/1.24.0 (Ubuntu)
+Date: Mon, 28 Sep 2026 16:13:31 GMT
+Content-Type: application/json
+Transfer-Encoding: chunked
+Connection: keep-alive
+X-Powered-By: PHP/8.5.11
+Set-Cookie: PHPSESSID=ceda6f1695c4fab9b3fbc4ac0cee6d98; path=/; HttpOnly; SameSite=Lax
+Expires: Thu, 19 Nov 1981 08:52:00 GMT
+Cache-Control: no-store, no-cache, must-revalidate
+Pragma: no-cache
+Set-Cookie: csrfToken=QgkBDZkoPDi56fQNfZZy7TNiYjE3Nzg0Zjk2ODI0ZTVkNTFjZjAxNGFiMTFjNWM4YjYxZDRiNDc%3D; path=/; HttpOnly
+
+{"visits":1}
+Running 10s test @ http://127.0.0.1:18860/bench/session
+  4 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    27.97ms    1.58ms  50.32ms   93.28%
+    Req/Sec   573.47     43.87   646.00     71.75%
+  22845 requests in 10.03s, 9.85MB read
+Requests/sec:   2278.52
+Transfer/sec:      0.98MB
+### swerve 4 workers /bench/json
+HTTP/1.1 200 OK
+Content-Type: application/json
+Set-Cookie: csrfToken=sin3OhbyWZUH50nEdsMfCWViM2M3NDM3MjYyNzM4YjM5NDI0ZGVlZTgwOGIyODhlNGU2MGE3MmI%3D; path=/; httponly
+Date: Mon, 28 Sep 2026 16:13:51 GMT
+Content-Length: 17
+
+{"hello":"world"}
+Running 10s test @ http://127.0.0.1:18861/bench/json
+  4 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     7.04ms    1.85ms  28.67ms   60.40%
+    Req/Sec     2.28k   105.79     2.47k    72.50%
+  90845 requests in 10.03s, 21.34MB read
+Requests/sec:   9059.72
+Transfer/sec:      2.13MB
+### swerve 4 workers /bench/session
+HTTP/1.1 200 OK
+Content-Type: application/json
+Set-Cookie: csrfToken=iwEW4qEov0lgZRqN6HZ6%2BzRiNTU2ZjBkOGNjNWY2ZGYwNzJlMWI3MThiNzI1OWZhNzJkMDJkYTQ%3D; path=/; httponly
+Set-Cookie: PHPSESSID=ea24a4df92195213aa5ac4bd29d632c9; path=/; samesite=Lax; httponly
+Expires: Thu, 19 Nov 1981 08:52:00 GMT
+Cache-Control: no-store, no-cache, must-revalidate
+Pragma: no-cache
+Date: Mon, 28 Sep 2026 16:14:11 GMT
+Content-Length: 12
+
+{"visits":1}
+Running 10s test @ http://127.0.0.1:18861/bench/session
+  4 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     8.55ms    2.50ms  29.53ms   52.25%
+    Req/Sec     1.88k   101.34     2.37k    73.75%
+  74772 requests in 10.02s, 25.20MB read
+Requests/sec:   7461.86
+Transfer/sec:      2.51MB
+### swerve 4 workers with phasync-ext /bench/json
+HTTP/1.1 200 OK
+Content-Type: application/json
+Set-Cookie: csrfToken=B0GPq%2BhiQBLXIiHsgJL%2BA2QxZWZiY2E1YTE5MjE5Yjg1ZTA2YTVjNWRiMjE3OTk4NDhjYTQ5Yzg%3D; path=/; httponly
+Date: Mon, 28 Sep 2026 16:14:23 GMT
+Content-Length: 17
+
+{"hello":"world"}
+Running 10s test @ http://127.0.0.1:18861/bench/json
+  4 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     6.95ms    2.74ms  23.59ms   72.92%
+    Req/Sec     2.33k   291.37     2.85k    53.25%
+  92780 requests in 10.02s, 21.79MB read
+Requests/sec:   9257.10
+Transfer/sec:      2.17MB
+### swerve 4 workers with phasync-ext /bench/session
+HTTP/1.1 200 OK
+Content-Type: application/json
+Set-Cookie: csrfToken=vs39GkISGT8mwmdY7u%2B15jhjMDc2NjUyNTFjZjQ3MjE3NWMwODFlZWMxZDlmODg3YjkxODg5N2Y%3D; path=/; httponly
+Set-Cookie: PHPSESSID=5f539c4ebc64fd25c4f0499137c24b9a; path=/; samesite=Lax; httponly
+Expires: Thu, 19 Nov 1981 08:52:00 GMT
+Cache-Control: no-store, no-cache, must-revalidate
+Pragma: no-cache
+Date: Mon, 28 Sep 2026 16:14:34 GMT
+Content-Length: 12
+
+{"visits":1}
+Running 10s test @ http://127.0.0.1:18861/bench/session
+  4 threads and 64 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     8.27ms    2.22ms  45.56ms   92.23%
+    Req/Sec     1.95k   188.53     2.29k    61.50%
+  77448 requests in 10.02s, 26.10MB read
+Requests/sec:   7728.53
+Transfer/sec:      2.60MB
