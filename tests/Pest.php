@@ -140,3 +140,82 @@ final class Cookies
         return $pairs ? $headers + ['Cookie' => \implode('; ', $pairs)] : $headers;
     }
 }
+
+/**
+ * Open a WebSocket: the handshake sent and its 101 read.
+ *
+ * @return resource
+ */
+function ws_open(string $addr, string $path, array $headers = [])
+{
+    $socket = http_send($addr, 'GET', $path, $headers + ['Upgrade' => 'websocket', 'Connection' => 'Upgrade', 'Sec-WebSocket-Key' => \base64_encode(\random_bytes(16)), 'Sec-WebSocket-Version' => '13']);
+    $head   = '';
+    while (!\str_ends_with($head, "\r\n\r\n")) {
+        $byte = \fread($socket, 1);
+        if ('' === $byte || false === $byte) {
+            throw new RuntimeException("No 101 from $path: $head");
+        }
+        $head .= $byte;
+    }
+    if (!\str_starts_with($head, 'HTTP/1.1 101')) {
+        throw new RuntimeException("No 101 from $path: $head");
+    }
+
+    return $socket;
+}
+
+/** Send a masked frame, as a client must: opcode 1 text, 2 binary, 8 close. */
+function ws_send($socket, string $payload, int $opcode = 1): void
+{
+    $mask = \random_bytes(4);
+    $n    = \strlen($payload);
+    $len  = $n < 126 ? \chr(0x80 | $n) : \chr(0x80 | 126) . \pack('n', $n);
+    \fwrite($socket, \chr(0x80 | $opcode) . $len . $mask . ($payload ^ \substr(\str_repeat($mask, \intdiv($n, 4) + 1), 0, $n)));
+}
+
+/**
+ * The next frame from the server, as [opcode, payload], or null when the connection ended.
+ *
+ * @return array{0: int, 1: string}|null
+ */
+function ws_read($socket): ?array
+{
+    $read = static function (int $n) use ($socket): ?string {
+        $bytes = '';
+        while (\strlen($bytes) < $n) {
+            $chunk = \fread($socket, $n - \strlen($bytes));
+            if ('' === $chunk || false === $chunk) {
+                return null;
+            }
+            $bytes .= $chunk;
+        }
+
+        return $bytes;
+    };
+    if (null === $head = $read(2)) {
+        return null;
+    }
+    $n = \ord($head[1]) & 0x7F;
+    if (126 === $n) {
+        $n = \unpack('n', $read(2))[1];
+    } elseif (127 === $n) {
+        $n = \unpack('J', $read(8))[1];
+    }
+
+    return [\ord($head[0]) & 0x0F, $n > 0 ? $read($n) : ''];
+}
+
+/** The next text or binary message, skipping pings; null when the server closed. */
+function ws_message($socket): ?string
+{
+    while (null !== $frame = ws_read($socket)) {
+        if (1 === $frame[0] || 2 === $frame[0]) {
+            return $frame[1];
+        }
+        if (8 === $frame[0]) {
+            return null;
+        }
+    }
+
+    return null;
+}

@@ -11,7 +11,10 @@ use Cake\Http\ServerRequest;
 use Cake\Routing\Router;
 use phasync;
 use phasync\Psr\UnbufferedStream;
+use Swerve\CakePHP\CakeResponse;
 use Swerve\Http\WebSocket;
+use Swerve\Swerve;
+use Throwable;
 
 /**
  * The actions the swerve-cakephp test suite calls, at /swerve-test/<action>.
@@ -158,20 +161,90 @@ class SwerveTestController extends AppController
         return $this->response->withType('text/event-stream')->withBody($stream);
     }
 
-    /** A controller must return Cake's Response: the 101 of WebSocket::from() becomes one. */
+    /** Echoes text as text and binary as binary. */
     public function ws(): Response
     {
-        $upgrade = WebSocket::from($this->request, function (WebSocket $ws) {
+        return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) {
             foreach ($ws as $message) {
-                $ws->send("echo: $message");
+                $ws->isBinary() ? $ws->sendBinary($message) : $ws->send("echo: $message");
             }
-        });
-        $response = (new Response(['status' => $upgrade->getStatusCode(), 'stream' => $upgrade->getBody()]))->withoutHeader('Content-Type');
-        foreach ($upgrade->getHeaders() as $name => $values) {
-            $response = $response->withHeader($name, $values);
+        }));
+    }
+
+    /** Forwards the topic 'news', and nothing else: the callback ends when its client leaves. */
+    public function news(): Response
+    {
+        return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) {
+            self::countLive(1);
+            try {
+                foreach (Swerve::subscribe('news') as $message) {
+                    $ws->send($message);
+                }
+            } finally {
+                self::countLive(-1);
+            }
+        }));
+    }
+
+    public function publish(): Response
+    {
+        Swerve::publish('news', (string)$this->request->getQuery('m'));
+
+        return $this->send(['published' => true]);
+    }
+
+    /** The news callbacks running, in all workers: each worker keeps its count in a file. */
+    public function live(): Response
+    {
+        $workers = [];
+        foreach (glob(TMP . 'ws-live-*') as $file) {
+            $pid = (int)substr($file, strlen(TMP . 'ws-live-'));
+            if (posix_kill($pid, 0)) {
+                $workers[$pid] = (int)file_get_contents($file);
+            }
         }
 
-        return $response;
+        return $this->send(['total' => array_sum($workers), 'workers' => $workers]);
+    }
+
+    /**
+     * The user, taken before the callback, and what Router::getRequest() says inside it: the
+     * request the worker served last, maybe somebody else's.
+     */
+    public function identity(): Response
+    {
+        $user = $this->Authentication->getIdentity()?->get('username');
+
+        return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) use ($user) {
+            foreach ($ws as $message) {
+                $ws->send(json_encode([
+                    'user' => $user,
+                    'router' => Router::getRequest()?->getAttribute('identity')?->get('username'),
+                ]));
+            }
+        }));
+    }
+
+    /** Reads the session inside the callback, which is wrong: the request is over. */
+    public function wrongSession(): Response
+    {
+        return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) {
+            foreach ($ws as $message) {
+                try {
+                    $ws->send(json_encode(['session' => $this->request->getSession()->read('Auth.username')]));
+                } catch (Throwable $e) {
+                    $ws->send(json_encode(['error' => $e->getMessage()]));
+                }
+            }
+        }));
+    }
+
+    /** Counts this worker's running news callbacks, in a file the live action reads. */
+    private static function countLive(int $change): void
+    {
+        static $count = 0;
+        $count += $change;
+        file_put_contents(TMP . 'ws-live-' . getmypid(), (string)$count);
     }
 
     public function slow(): Response

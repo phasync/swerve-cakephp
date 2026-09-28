@@ -71,22 +71,3 @@ it('receives an upload', function () {
 
     expect(\json_decode($response['body'], true))->toBe(['name' => 'data.bin', 'size' => 200_000, 'md5' => \md5($content), 'title' => 'A file']);
 });
-
-it('serves a WebSocket from a controller', function () {
-    $socket = http_send($GLOBALS['app'][1], 'GET', '/swerve-test/ws', ['Upgrade' => 'websocket', 'Connection' => 'Upgrade', 'Sec-WebSocket-Key' => 'dGhlIHNhbXBsZSBub25jZQ==', 'Sec-WebSocket-Version' => '13']);
-    $head   = '';
-    while (!\str_ends_with($head, "\r\n\r\n")) {
-        $head .= \fread($socket, 1);
-    }
-    expect($head)->toStartWith('HTTP/1.1 101')
-        ->and($head)->toContain('s3pPLMBiTxaQ9kYGzzhZRbK+xOo=');
-
-    $mask = \random_bytes(4);
-    \fwrite($socket, "\x81" . \chr(0x80 | 5) . $mask . ('hello' ^ \str_repeat($mask, 2)));
-    $frame = \fread($socket, 2);
-    $reply = \fread($socket, \ord($frame[1]));
-    \fclose($socket);
-
-    expect(\ord($frame[0]))->toBe(0x81)
-        ->and($reply)->toBe('echo: hello');
-});
