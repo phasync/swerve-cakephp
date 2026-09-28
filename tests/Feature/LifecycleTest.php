@@ -10,10 +10,12 @@ it('finishes a slow request when told to stop, without errors', function () {
     \usleep(300_000);
     \proc_terminate($proc, \SIGTERM);
     $response = http_response($socket);
-    while (\proc_get_status($proc)['running']) {
+    // PHP before 8.3 has the exit code only from the proc_get_status() that saw the exit
+    while (($status = \proc_get_status($proc))['running']) {
         \usleep(50_000);
     }
-    $code = \proc_close($proc);
+    \proc_close($proc);
+    $code = $status['exitcode'];
 
     expect($response['status'])->toBe(200)
         ->and($response['body'])->toBe('slow done')
