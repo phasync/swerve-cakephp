@@ -3,6 +3,7 @@
 namespace Swerve\CakePHP;
 
 use Cake\Http\Cookie\Cookie;
+use phasync\Context\ContextInterface;
 
 /**
  * CakePHP's Session, for a worker that serves one request after another.
@@ -27,6 +28,9 @@ final class Session extends \Cake\Http\Session
     /** Whether this request started the session. */
     private bool $used = false;
 
+    /** The request's phasync context, between begin() and finish(). */
+    private ?ContextInterface $context = null;
+
     private string $cacheLimiter;
 
     public function __construct(array $config = [])
@@ -49,6 +53,28 @@ final class Session extends \Cake\Http\Session
         $this->cookieId = \is_string($id) && 1 === \preg_match('/^[a-zA-Z0-9,-]{1,256}$/D', $id) ? $id : null;
         $this->_started = false;
         $this->used     = false;
+        $this->context  = \phasync::getContext();
+    }
+
+    /**
+     * Every read and write of the session asks this first. Only the request's own coroutines
+     * may: a WebSocket callback or other coroutine that outlives its request would see the
+     * session of whichever request the worker serves then, or start the last one's again.
+     */
+    public function started(): bool
+    {
+        if (null === $this->context || \phasync::getContext() !== $this->context) {
+            throw new \LogicException('The session belongs to its request, which is over: take what you need from it before WebSocket::from() or phasync::go()');
+        }
+
+        return parent::started();
+    }
+
+    public function id(?string $id = null): string
+    {
+        $this->started();
+
+        return parent::id($id);
     }
 
     public function start(): bool
@@ -93,7 +119,8 @@ final class Session extends \Cake\Http\Session
         if (\PHP_SESSION_ACTIVE === \session_status()) {
             \session_write_close();
         }
-        $id = \session_id();
+        $this->context = null;
+        $id            = \session_id();
         \session_id('');
         $_SESSION       = [];
         $this->_started = false;
