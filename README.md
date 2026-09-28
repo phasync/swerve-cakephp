@@ -13,6 +13,8 @@ run a CakePHP application unchanged.
 ```bash
 composer config minimum-stability alpha   # while swerve is alpha
 composer config prefer-stable true
+composer config minimum-stability alpha   # while swerve is in alpha
+composer config prefer-stable true         # everything else stays stable
 composer require phasync/swerve-cakephp
 ```
 
