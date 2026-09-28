@@ -32,6 +32,69 @@ That's the whole setup. `webroot/index.php` stays as it is, so the same applicat
 under PHP-FPM. An application class other than `App\Application` is named with
 `new Handler(__DIR__, application: My\Application::class)`.
 
+## WebSockets
+
+A controller action answers a WebSocket with `Swerve\Http\WebSocket::from()`. Cake wants its own
+`Response` from an action; `CakeResponse::from()` makes one of the 101, headers and connection
+unchanged:
+
+```php
+use Cake\Http\Response;
+use Swerve\CakePHP\CakeResponse;
+use Swerve\Http\WebSocket;
+
+public function echo(): Response
+{
+    return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) {
+        foreach ($ws as $message) {      // ends when the client leaves
+            $ws->send("echo: $message");
+        }
+    }));
+}
+```
+
+An ordinary GET to the action is answered 426. The callback runs in a coroutine of its own after
+the action has returned, beside the worker's next Cake requests: an open WebSocket doesn't hold
+the worker's turn (the tests serve ordinary requests promptly with 250 open in one worker).
+
+**Server push.** A callback that only forwards a topic ends when its client leaves; any route, in
+any worker, publishes:
+
+```php
+public function news(): Response
+{
+    return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) {
+        foreach (Swerve::subscribe('news') as $message) {
+            $ws->send($message);
+        }
+    }));
+}
+
+public function post(): Response
+{
+    Swerve::publish('news', json_encode($this->request->getData()));
+
+    return $this->response->withStatus(204);
+}
+```
+
+**The user.** Take what the callback needs from the request before `WebSocket::from()`:
+
+```php
+$user = $this->Authentication->getIdentity();         // or the session's:
+$room = $this->request->getSession()->read('room');
+
+return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) use ($user, $room) {
+    // $user and $room are this connection's
+}));
+```
+
+Inside the callback the request is over. `Router::getRequest()` and `Router::url()` describe the
+request the worker serves last, maybe another user's; the session throws a `LogicException`
+(reading it there would read whichever session the worker has open then). Don't use Cake's
+database connection in the callback either: it belongs to the worker's requests, which run
+meanwhile. A shutdown or reload closes open WebSockets with 1001.
+
 ## What changes
 
 | CakePHP 5.4 skeleton, 4 workers | PHP-FPM | swerve | swerve + phasync-ext |
@@ -68,7 +131,9 @@ routing), the controller with its components, and building Cake's `ServerRequest
 - **Sessions:** PHP's session module and Cake's configured engine, as under PHP-FPM, shared by
   the workers. The session id comes from the request's cookie, the `Set-Cookie` and no-cache
   headers PHP would send go into the response, and the id is forgotten after each request, so a
-  visitor without a cookie gets a new session. `renew()` (at login) gives a new id.
+  visitor without a cookie gets a new session. `renew()` (at login) gives a new id. Only the
+  request's own code may use it: a coroutine that outlives the request, such as a WebSocket
+  callback, gets a `LogicException`.
 
 ## Before you deploy
 
@@ -103,24 +168,10 @@ routing), the controller with its components, and building Cake's `ServerRequest
 
   Such a coroutine runs beside the worker's Cake requests: don't use Cake in it (the router,
   the session, the ORM's database connection).
-- **WebSockets.** A controller must return Cake's `Response`, so wrap the 101 of
-  `Swerve\Http\WebSocket::from()` in one:
-
-  ```php
-  $upgrade  = WebSocket::from($this->request, function (WebSocket $ws) {
-      foreach ($ws as $message) {
-          $ws->send("echo: $message");
-      }
-  });
-  $response = (new Response(['status' => 101, 'stream' => $upgrade->getBody()]))->withoutHeader('Content-Type');
-  foreach ($upgrade->getHeaders() as $name => $values) {
-      $response = $response->withHeader($name, $values);
-  }
-
-  return $response;
-  ```
+- **WebSocket callbacks** and other coroutines run after their request: see
+  [WebSockets](#websockets) for what they may take from Cake.
 - **`Server.terminate` listeners** run after the response is handed to swerve, in turn with
-  the worker's requests.
+  the worker's requests, with the session closed.
 - **Static state of your own** (static properties, singletons) lives as long as the worker;
   `Configure::write()` during a request is undone after it.
 
