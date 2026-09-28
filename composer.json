@@ -13,7 +13,7 @@
     "require": {
         "php": "^8.2",
         "cakephp/cakephp": "^5.1",
-        "phasync/swerve": "^0.1.0-alpha12",
+        "phasync/swerve": "^0.1.0-alpha15",
         "psr/http-server-handler": "^1.0"
     },
     "require-dev": {
