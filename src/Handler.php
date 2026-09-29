@@ -41,11 +41,12 @@ use Psr\Http\Server\RequestHandlerInterface;
  * Cake's; the session is written and closed. Cookies of the response's CookieCollection, which
  * only Cake's ResponseEmitter would send, become Set-Cookie headers.
  *
- * Concurrency: Cake keeps the current request in statics (Router::getRequest(), Router::url()),
- * PHP one session per process, and Configure one configuration: two requests of a worker must
- * not overlap. Requests wait for each other with phasync\Util\Synchronized; a worker runs one
+ * Concurrency: Cake keeps the current request, Configure, the locale, the global event manager
+ * and the table registry in static properties, and $_SESSION and the output buffers are the
+ * process's: two requests of a worker must not overlap. Requests, Server.terminate listeners and
+ * CallbackStream callbacks wait for each other with phasync\Util\Synchronized; a worker runs one
  * Cake request at a time, as a PHP-FPM process does, while swerve's own work (connections,
- * static files, WebSockets and streams after their response) goes on.
+ * static files, WebSockets and streams after their response) goes on. See docs/concurrency.md.
  */
 final class Handler implements RequestHandlerInterface
 {

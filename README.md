@@ -125,11 +125,12 @@ routing), the controller with its components, and building Cake's `ServerRequest
   that doesn't connect the routes again; swerve's request becomes a `Cake\Http\ServerRequest`,
   with its body and uploaded files, and runs through it. The response's cookies, which only
   Cake's `ResponseEmitter` would send, become `Set-Cookie` headers.
-- **Concurrency:** one Cake request at a time per worker, with `phasync\Util\Synchronized`.
-  Cake keeps the current request in static properties (`Router::getRequest()`, `Router::url()`),
-  PHP one session per process, `Configure` one configuration: overlapping requests would see
-  each other's. swerve's own work (connections, static files, WebSockets and streams after
-  their response) goes on meanwhile.
+- **Concurrency:** one Cake request at a time per worker, with `phasync\Util\Synchronized`:
+  size `--workers` as PHP-FPM's `pm.max_children`. Cake keeps the current request, Configure,
+  the locale, the global event manager and the table registry in static properties, and
+  `$_SESSION` and the output buffers are the process's: overlapping requests see each other's.
+  swerve's own work (connections, static files, WebSockets and streams after their response)
+  goes on meanwhile. The evidence, and what was tried: [docs/concurrency.md](docs/concurrency.md).
 - **Sessions:** PHP's session module and Cake's configured engine, as under PHP-FPM, shared by
   the workers. The session id comes from the request's cookie, the `Set-Cookie` and no-cache
   headers PHP would send go into the response, and the id is forgotten after each request, so a
