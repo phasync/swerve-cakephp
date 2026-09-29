@@ -5,9 +5,15 @@ namespace App\Controller;
 
 use ArrayObject;
 use Cake\Core\Configure;
+use Cake\Core\ContainerInterface;
+use Cake\Event\EventInterface;
+use Cake\Event\EventManager;
 use Cake\Http\CallbackStream;
 use Cake\Http\Response;
 use Cake\Http\ServerRequest;
+use Cake\I18n\DateTime;
+use Cake\I18n\I18n;
+use Cake\ORM\Table;
 use Cake\Routing\Router;
 use phasync;
 use phasync\Psr\UnbufferedStream;
@@ -61,16 +67,23 @@ class SwerveTestController extends AppController
     }
 
     /**
-     * Stores $v in every request-scoped place, waits so that other requests run, and reads them
-     * back. $service comes from the application's container.
+     * Stores $v in every place a request can keep state, renders an element that waits halfway
+     * (while other requests run) and reads them all back. $service and $container come from the
+     * application's container; ?tz= is a time zone to set.
      */
-    public function isolation(string $v, ServerRequest $service): Response
+    public function isolation(string $v, ServerRequest $service, ContainerInterface $container): Response
     {
         $this->request = $this->request->withAttribute('v', $v);
         $this->request->getSession()->write('v', $v);
         $this->Authentication->setIdentity(new ArrayObject(['username' => "user-$v"]));
         Configure::write('SwerveTest.v', $v);
-        $this->wait((float)$this->request->getQuery('wait', 0.1));
+        I18n::setLocale("en_$v");
+        date_default_timezone_set((string)$this->request->getQuery('tz', 'UTC'));
+        EventManager::instance()->on('SwerveTest.probe', function (EventInterface $event) use ($v): void {
+            $event->setData('seen', [...$event->getData('seen') ?? [], $v]);
+        });
+        $this->fetchTable('SwerveProbes', ['className' => Table::class])->addBehavior('Timestamp')->getBehavior('Timestamp')->timestamp(new DateTime('@' . crc32($v)));
+        $rendered = $this->createView()->element('swerve_wait', ['v' => $v, 'wait' => fn () => $this->wait((float)$this->request->getQuery('wait', 0.1))]);
 
         return $this->send([
             'attribute' => $this->request->getAttribute('v'),
@@ -78,9 +91,15 @@ class SwerveTestController extends AppController
             'url' => Router::url(['_name' => 'isolation', 'v' => $v]),
             'fullUrl' => Router::url('/', true),
             'service' => $service->getParam('v'),
+            'container' => $container->get(ServerRequest::class)->getParam('v'),
             'session' => $this->request->getSession()->read('v'),
             'identity' => $this->Authentication->getIdentity()?->get('username'),
             'configure' => Configure::read('SwerveTest.v'),
+            'locale' => I18n::getLocale(),
+            'timezone' => date_default_timezone_get(),
+            'events' => EventManager::instance()->dispatch('SwerveTest.probe')->getData('seen'),
+            'table' => $this->fetchTable('SwerveProbes', ['className' => Table::class])->getBehavior('Timestamp')?->timestamp()->getTimestamp() === crc32($v),
+            'rendered' => $rendered,
         ]);
     }
 
