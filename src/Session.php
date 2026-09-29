@@ -3,7 +3,6 @@
 namespace Swerve\CakePHP;
 
 use Cake\Http\Cookie\Cookie;
-use phasync\Context\ContextInterface;
 
 /**
  * CakePHP's Session, for a worker that serves one request after another.
@@ -29,7 +28,7 @@ final class Session extends \Cake\Http\Session
     private bool $used = false;
 
     /** The request's phasync context, between begin() and finish(). */
-    private ?ContextInterface $context = null;
+    private ?object $context = null;
 
     private string $cacheLimiter;
 
