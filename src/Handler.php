@@ -200,19 +200,35 @@ final class Handler implements RequestHandlerInterface
 
     /**
      * Run a CallbackStream's callback, sending what it echoes, and returns, as it comes. It runs
-     * while no Cake request does, since PHP's output buffers are the process's.
+     * while no Cake request does, since PHP's output buffers are the process's. The output handler
+     * only collects (PHP calls it from C, where a wait need not let the other coroutines run, and
+     * the stream makes a writer wait while its reader is behind): a coroutine of its own appends.
      */
     private static function stream(callable $callback, UnbufferedStream $stream): void
     {
-        $gone  = false;
-        $level = \ob_get_level();
-        \ob_start(static function (string $chunk) use ($stream, &$gone): string {
-            if ('' !== $chunk && !$gone) {
-                try {
-                    $stream->append($chunk);
-                } catch (\Throwable) {
-                    $gone = true; // the client left
+        $out        = new \stdClass();
+        $out->bytes = '';
+        $out->ended = false;
+        $out->gone  = false;
+        $feeder     = \phasync::go(static function () use ($stream, $out) {
+            try {
+                while (!$out->ended || '' !== $out->bytes) {
+                    if ('' === $out->bytes) {
+                        \phasync::awaitFlag($out);
+                        continue;
+                    }
+                    [$bytes, $out->bytes] = [$out->bytes, ''];
+                    $stream->append($bytes);
                 }
+            } catch (\Throwable) {
+                $out->gone = true; // the client left
+            }
+        });
+        $level = \ob_get_level();
+        \ob_start(static function (string $chunk) use ($out): string {
+            if ('' !== $chunk && !$out->gone) {
+                $out->bytes .= $chunk;
+                \phasync::raiseFlag($out);
             }
 
             return '';
@@ -226,6 +242,9 @@ final class Handler implements RequestHandlerInterface
             while (\ob_get_level() > $level) {
                 \ob_end_flush();
             }
+            $out->ended = true;
+            \phasync::raiseFlag($out);
+            \phasync::await($feeder);
             $stream->end();
         }
     }

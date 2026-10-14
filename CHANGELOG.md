@@ -15,6 +15,10 @@
   dependencies.
 - A stopping worker ends its requests at once (swerve's new stop): a request in flight is answered
   `503` by swerve. Cake's error middleware neither logs that `WorkerStoppingException` nor renders it.
+- A `CallbackStream`'s output handler only collects what the callback echoes; a coroutine of its own
+  appends it to the response body. PHP calls output handlers from C, where a wait (the body's
+  back-pressure) need not let other coroutines run: with phasync-ext the worker would wait for a
+  reader that could not run.
 
 ## 0.1.0-alpha2
 
