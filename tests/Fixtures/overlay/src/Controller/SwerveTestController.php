@@ -18,7 +18,8 @@ use Cake\Routing\Router;
 use phasync;
 use phasync\Psr\UnbufferedStream;
 use Swerve\CakePHP\CakeResponse;
-use Swerve\Http\WebSocket;
+use Swerve\Psr15\WebSocketResponse;
+use Swerve\WebSocket;
 use Swerve\Swerve;
 use Throwable;
 
@@ -183,7 +184,7 @@ class SwerveTestController extends AppController
     /** Echoes text as text and binary as binary. */
     public function ws(): Response
     {
-        return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) {
+        return CakeResponse::from(WebSocketResponse::from($this->request, function (WebSocket $ws) {
             foreach ($ws as $message) {
                 $ws->isBinary() ? $ws->sendBinary($message) : $ws->send("echo: $message");
             }
@@ -193,7 +194,7 @@ class SwerveTestController extends AppController
     /** Forwards the topic 'news', and nothing else: the callback ends when its client leaves. */
     public function news(): Response
     {
-        return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) {
+        return CakeResponse::from(WebSocketResponse::from($this->request, function (WebSocket $ws) {
             self::countLive(1);
             try {
                 foreach (Swerve::subscribe('news') as $message) {
@@ -234,7 +235,7 @@ class SwerveTestController extends AppController
     {
         $user = $this->Authentication->getIdentity()?->get('username');
 
-        return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) use ($user) {
+        return CakeResponse::from(WebSocketResponse::from($this->request, function (WebSocket $ws) use ($user) {
             foreach ($ws as $message) {
                 $ws->send(json_encode([
                     'user' => $user,
@@ -247,7 +248,7 @@ class SwerveTestController extends AppController
     /** Reads the session inside the callback, which is wrong: the request is over. */
     public function wrongSession(): Response
     {
-        return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) {
+        return CakeResponse::from(WebSocketResponse::from($this->request, function (WebSocket $ws) {
             foreach ($ws as $message) {
                 try {
                     $ws->send(json_encode(['session' => $this->request->getSession()->read('Auth.username')]));

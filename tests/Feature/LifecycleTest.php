@@ -4,7 +4,7 @@
  * The worker's life: a graceful drain, and memory over many requests.
  */
 
-it('finishes a slow request when told to stop, without errors', function () {
+it('ends a slow request with swerve\'s 503 when told to stop, without errors', function () {
     [$proc, $addr, $log] = app_start(1);
     $socket              = http_send($addr, 'GET', '/swerve-test/slow?t=1');
     \usleep(300_000);
@@ -17,8 +17,8 @@ it('finishes a slow request when told to stop, without errors', function () {
     \proc_close($proc);
     $code = $status['exitcode'];
 
-    expect($response['status'])->toBe(200)
-        ->and($response['body'])->toBe('slow done')
+    // The worker stops at once, and its requests with it: swerve answers the one in flight
+    expect($response['status'])->toBe(503)
         ->and($code)->toBe(0)
         ->and(\file_get_contents($log))->not->toMatch('/error|warning|fatal|exception/i');
 });

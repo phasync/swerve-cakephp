@@ -8,14 +8,14 @@ use Psr\Http\Message\ResponseInterface;
 /**
  * Cake's Response from any PSR-7 response, for a controller action, which must return Cake's:
  *
- *     return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) {
+ *     return CakeResponse::from(WebSocketResponse::from($this->request, function (WebSocket $ws) {
  *         foreach ($ws as $message) {
  *             $ws->send("echo: $message");
  *         }
  *     }));
  *
  * Status, reason, headers and body are kept as they are, the body not copied: a 101's body is
- * the connection's way out.
+ * the WebSocket's outbound frames (swerve-psr15's WebSocketResponse).
  */
 final class CakeResponse
 {

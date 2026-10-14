@@ -10,4 +10,4 @@ if (getenv('SWERVE_TEST_TERMINATE')) {
     });
 }
 
-return new Swerve\CakePHP\Handler(__DIR__);
+return Swerve\Psr15\Bridge::wrap(new Swerve\CakePHP\Handler(__DIR__));

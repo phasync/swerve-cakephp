@@ -11,41 +11,46 @@ request and response bodies, and hold WebSockets and Server-Sent Events. This pa
 run a CakePHP application unchanged.
 
 ```bash
-composer config minimum-stability beta   # while swerve is in beta
-composer config prefer-stable true         # everything else stays stable
-composer require phasync/swerve-cakephp
+composer config minimum-stability dev    # phasync and swerve are on their development versions
+composer config prefer-stable true        # everything else stays stable
+composer config repositories.swerve-psr15 vcs https://github.com/phasync/swerve-psr15
+composer require 'phasync/swerve:dev-main as 0.1.0-beta7' phasync/swerve-cakephp
 ```
+
+```bash
+vendor/bin/swerve --adapter=cakephp --http=0.0.0.0:8080 --public=webroot
+```
+
+That's the whole setup: the `cakephp` adapter serves `App\Application`. `--adapter=cakephp` picks
+it over swerve-psr15's adapter, which comes with it (or put `"extra": {"swerve": {"adapter":
+"cakephp"}}` in your `composer.json`). `webroot/index.php` stays as it is, so the same application
+still runs under PHP-FPM. Another application class, or other settings, take a `swerve.php`, run
+with `--adapter=swerve`:
 
 ```php
 <?php // swerve.php, next to composer.json
 
-require __DIR__ . '/vendor/autoload.php';
-
-return new Swerve\CakePHP\Handler(__DIR__);
+return Swerve\Psr15\Bridge::wrap(new Swerve\CakePHP\Handler(__DIR__, application: My\Application::class));
 ```
 
-```bash
-vendor/bin/swerve --http=0.0.0.0:8080 --public=webroot swerve.php
-```
-
-That's the whole setup. `webroot/index.php` stays as it is, so the same application still runs
-under PHP-FPM. An application class other than `App\Application` is named with
-`new Handler(__DIR__, application: My\Application::class)`.
+The handler is a PSR-15 request handler, which [swerve-psr15](https://github.com/phasync/swerve-psr15)'s
+`Bridge` serves.
 
 ## WebSockets
 
-A controller action answers a WebSocket with `Swerve\Http\WebSocket::from()`. Cake wants its own
-`Response` from an action; `CakeResponse::from()` makes one of the 101, headers and connection
-unchanged:
+A controller action answers a WebSocket with swerve-psr15's `WebSocketResponse::from()`, and its
+callback gets swerve's `WebSocket`. Cake wants its own `Response` from an action;
+`CakeResponse::from()` makes one of the 101, headers and body unchanged:
 
 ```php
 use Cake\Http\Response;
 use Swerve\CakePHP\CakeResponse;
-use Swerve\Http\WebSocket;
+use Swerve\Psr15\WebSocketResponse;
+use Swerve\WebSocket;
 
 public function echo(): Response
 {
-    return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) {
+    return CakeResponse::from(WebSocketResponse::from($this->request, function (WebSocket $ws) {
         foreach ($ws as $message) {      // ends when the client leaves
             $ws->send("echo: $message");
         }
@@ -63,7 +68,7 @@ any worker, publishes:
 ```php
 public function news(): Response
 {
-    return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) {
+    return CakeResponse::from(WebSocketResponse::from($this->request, function (WebSocket $ws) {
         foreach (Swerve::subscribe('news') as $message) {
             $ws->send($message);
         }
@@ -78,13 +83,13 @@ public function post(): Response
 }
 ```
 
-**The user.** Take what the callback needs from the request before `WebSocket::from()`:
+**The user.** Take what the callback needs from the request before `WebSocketResponse::from()`:
 
 ```php
 $user = $this->Authentication->getIdentity();         // or the session's:
 $room = $this->request->getSession()->read('room');
 
-return CakeResponse::from(WebSocket::from($this->request, function (WebSocket $ws) use ($user, $room) {
+return CakeResponse::from(WebSocketResponse::from($this->request, function (WebSocket $ws) use ($user, $room) {
     // $user and $room are this connection's
 }));
 ```
@@ -139,6 +144,9 @@ routing), the controller with its components, and building Cake's `ServerRequest
 ## Before you deploy
 
 - `exit` and `dd()` end the worker, and the requests it is serving with it.
+- **A stop ends the requests in flight.** On a shutdown or reload swerve stops a worker at once:
+  a request still waiting then ends, answered `503` by swerve when nothing was sent yet (Cake
+  neither logs it nor renders an error page); clients retry.
 - **Configuration.** Set `APP_FULL_BASE_URL` and `SECURITY_SALT` (and `DEBUG=false`, since
   `app_local.php` defaults to debug on), as for PHP-FPM: with debug off the skeleton's
   `HostHeaderMiddleware` refuses every request while `App.fullBaseUrl` is empty. With debug on,

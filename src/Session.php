@@ -27,8 +27,8 @@ final class Session extends \Cake\Http\Session
     /** Whether this request started the session. */
     private bool $used = false;
 
-    /** The request's phasync context, between begin() and finish(). */
-    private ?object $context = null;
+    /** The request's Scope, between begin() and finish(). */
+    private ?\Scope $scope = null;
 
     private string $cacheLimiter;
 
@@ -52,7 +52,7 @@ final class Session extends \Cake\Http\Session
         $this->cookieId = \is_string($id) && 1 === \preg_match('/^[a-zA-Z0-9,-]{1,256}$/D', $id) ? $id : null;
         $this->_started = false;
         $this->used     = false;
-        $this->context  = \phasync::getContext();
+        $this->scope    = \Scope::getCurrent();
     }
 
     /**
@@ -62,8 +62,8 @@ final class Session extends \Cake\Http\Session
      */
     public function started(): bool
     {
-        if (null === $this->context || \phasync::getContext() !== $this->context) {
-            throw new \LogicException('The session belongs to its request, which is over: take what you need from it before WebSocket::from() or phasync::go()');
+        if (null === $this->scope || \Scope::getCurrent() !== $this->scope) {
+            throw new \LogicException('The session belongs to its request, which is over: take what you need from it before WebSocketResponse::from() or phasync::go()');
         }
 
         return parent::started();
@@ -118,7 +118,7 @@ final class Session extends \Cake\Http\Session
         if (\PHP_SESSION_ACTIVE === \session_status()) {
             \session_write_close();
         }
-        $this->context = null;
+        $this->scope   = null;
         $id            = \session_id();
         \session_id('');
         $_SESSION       = [];

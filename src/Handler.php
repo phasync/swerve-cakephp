@@ -7,6 +7,7 @@ use Cake\Core\ContainerApplicationInterface;
 use Cake\Core\HttpApplicationInterface;
 use Cake\Core\PluginApplicationInterface;
 use Cake\Datasource\FactoryLocator;
+use Cake\Event\EventInterface;
 use Cake\Event\EventManager;
 use Cake\Http\BaseApplication;
 use Cake\Http\MiddlewareQueue;
@@ -24,11 +25,14 @@ use phasync\Util\Synchronized;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Swerve\WorkerStoppingException;
 
 /**
- * A CakePHP application as swerve's request handler, from the project's swerve.php:
+ * A CakePHP application as a PSR-15 request handler, which the `cakephp` adapter's entry
+ * ({@see entry()}) serves through swerve-psr15's Bridge; a swerve.php run with `--adapter=swerve`
+ * may do the same:
  *
- *     return new Swerve\CakePHP\Handler(__DIR__);
+ *     return Swerve\Psr15\Bridge::wrap(new Swerve\CakePHP\Handler(__DIR__));
  *
  * Once per worker: the application is bootstrapped with its plugins, as Cake\Http\Server does
  * it, its routes connected, and the session configured. The state after that is kept.
@@ -64,6 +68,8 @@ final class Handler implements RequestHandlerInterface
      */
     public function __construct(string $root, string $application = 'App\Application')
     {
+        // The application's autoloader (the vendor directory swerve runs from): swerve's worker loads only its own dependencies
+        require_once $GLOBALS['_composer_autoload_path'] ?? $root . '/vendor/autoload.php';
         $this->app    = $app = new $application($root . '/config');
         $this->server = new Server($app);
 
@@ -88,6 +94,15 @@ final class Handler implements RequestHandlerInterface
         // As ServerRequestFactory::fromGlobals() configures it, once: PHP's session settings are the process's
         ['webroot' => $webroot] = UriFactory::marshalUriAndBaseFromSapi(['REQUEST_URI' => '/']);
         $this->session          = Session::create((array) Configure::read('Session') + ['defaults' => 'php', 'cookiePath' => $webroot]);
+
+        // A worker that stops ends its requests with a WorkerStoppingException, no error of the
+        // application's: swerve answers it (a 503 when nothing was sent yet), not Cake's error page
+        Configure::write('Error.skipLog', [...(array) Configure::read('Error.skipLog'), WorkerStoppingException::class]);
+        EventManager::instance()->on('Exception.beforeRender', static function (EventInterface $event): void {
+            if ($event->getData('exception') instanceof WorkerStoppingException) {
+                throw $event->getData('exception');
+            }
+        });
 
         $configure = Configure::read();
         $events    = \Closure::bind(static function () {
