@@ -21,6 +21,8 @@ worker's other requests; see [WebSockets](#websockets) and [docs/concurrency.md]
 The framework running correctly on swerve does not mean your application does: state your own
 code keeps in statics, globals or shared services, and connections shared between requests, need
 the same care. See [Making your application safe for concurrent requests](https://phasync.github.io/guides/concurrent-requests-in-your-application/).
+[phasync/doctor](https://github.com/phasync/doctor) lists the candidates in your code:
+`composer require --dev phasync/doctor`, then `vendor/bin/phasync-doctor`.
 
 ```bash
 composer require phasync/swerve-cakephp
