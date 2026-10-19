@@ -7,7 +7,7 @@ use Cake\Http\Response;
 
 /**
  * The benchmarked routes: JSON, a page that uses the session, and a wait of ?ms= (default 10) in
- * usleep(), as a database query waits: it blocks the worker without phasync-ext. No authentication.
+ * usleep(), as a database query waits: it blocks the worker without ext-phasync. No authentication.
  */
 class BenchController extends AppController
 {

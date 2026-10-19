@@ -10,11 +10,20 @@ is a PHP application server: long-running workers that serve HTTP/1.1 themselves
 request and response bodies, and hold WebSockets and Server-Sent Events. This package lets it
 run a CakePHP application unchanged.
 
+A worker runs one CakePHP request at a time, behind a lock: `Router`'s current request,
+`Configure`, the global event manager, the table registry, the locale, the time zone, the
+session and the output buffers are CakePHP's static, per-process state, so two requests of a
+worker must not use them at once. A request that waits (a database query, a remote call) holds
+its worker meanwhile, exactly as a PHP-FPM worker would: size `--workers` as `pm.max_children`.
+A WebSocket callback or a stream fed from a coroutine runs outside that lock, beside the
+worker's other requests; see [WebSockets](#websockets) and [docs/concurrency.md](docs/concurrency.md).
+
+The framework running correctly on swerve does not mean your application does: state your own
+code keeps in statics, globals or shared services, and connections shared between requests, need
+the same care. See [Making your application safe for concurrent requests](https://phasync.github.io/guides/concurrent-requests-in-your-application/).
+
 ```bash
-composer config minimum-stability dev    # phasync and swerve are on their development versions
-composer config prefer-stable true        # everything else stays stable
-composer config repositories.swerve-psr15 vcs https://github.com/phasync/swerve-psr15
-composer require 'phasync/swerve:dev-main as 0.1.0-beta7' phasync/swerve-cakephp
+composer require phasync/swerve-cakephp
 ```
 
 ```bash
@@ -100,23 +109,6 @@ request the worker serves last, maybe another user's; the session throws a `Logi
 database connection in the callback either: it belongs to the worker's requests, which run
 meanwhile. A shutdown or reload closes open WebSockets with 1001.
 
-## What changes
-
-| CakePHP 5.4 skeleton, 4 workers | PHP-FPM | swerve | swerve + phasync-ext |
-|---|---:|---:|---:|
-| JSON route | 2,369 req/s | 9,060 req/s (3.8×) | 9,257 req/s (3.9×) |
-| Page with session | 2,279 req/s | 7,462 req/s (3.3×) | 7,729 req/s (3.4×) |
-
-PHP-FPM behind nginx against swerve, `wrk -t4 -c64 -d10s`, opcache on, debug off, on a Xeon
-E5-2697 v3. The routes are two controller actions of the test application; the session is
-PHP's file handler. [Script and raw results](benchmarks/).
-
-A request costs about 0.4 ms of CPU in a warm worker, so a worker serves about 2,300 a
-second. Most of it is Cake's own work, the same under PHP-FPM: the middleware (CSRF tokens,
-routing), the controller with its components, and building Cake's `ServerRequest` (about
-45 µs, from swerve's request here, from PHP's globals under PHP-FPM). What this package adds
-(state put back, container and middleware queue built for each request) is about 25 µs.
-
 ## How it runs
 
 - **Once per worker:** the application is bootstrapped with its plugins, as
@@ -131,9 +123,10 @@ routing), the controller with its components, and building Cake's `ServerRequest
 - **Concurrency:** one Cake request at a time per worker, with `phasync\Util\Synchronized`:
   size `--workers` as PHP-FPM's `pm.max_children`. Cake keeps the current request, Configure,
   the locale, the global event manager and the table registry in static properties, and
-  `$_SESSION` and the output buffers are the process's: overlapping requests see each other's.
-  swerve's own work (connections, static files, WebSockets and streams after their response)
-  goes on meanwhile. The evidence, and what was tried: [docs/concurrency.md](docs/concurrency.md).
+  `$_SESSION` and the output buffers are the process's: overlapping requests would see each
+  other's, so the lock keeps them apart. swerve's own work (connections, static files,
+  WebSockets and streams after their response) goes on meanwhile. Details:
+  [docs/concurrency.md](docs/concurrency.md).
 - **Sessions:** PHP's session module and Cake's configured engine, as under PHP-FPM, shared by
   the workers. The session id comes from the request's cookie, the `Set-Cookie` and no-cache
   headers PHP would send go into the response, and the id is forgotten after each request, so a
@@ -186,7 +179,7 @@ routing), the controller with its components, and building Cake's `ServerRequest
 
 ## Compatibility
 
-| CakePHP | PHP | phasync-ext |
+| CakePHP | PHP | ext-phasync |
 |---|---|---|
 | 5.1 – 5.4 | 8.2 – 8.5 | optional; tested with and without |
 

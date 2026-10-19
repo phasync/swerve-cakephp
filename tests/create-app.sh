@@ -9,12 +9,12 @@ if [ ! -d app ]; then
     composer create-project --no-interaction --no-progress --prefer-dist "cakephp/app:$1.*" app
 fi
 cd app
-composer config minimum-stability dev
+composer config minimum-stability stable
 composer config prefer-stable true
 composer config repositories.swerve-cakephp '{"type": "path", "url": "../package", "options": {"symlink": true}}'
 composer config repositories.swerve-psr15 vcs https://github.com/phasync/swerve-psr15
-# swerve-psr15 requires a release of swerve: dev-main, aliased, satisfies it
-composer require --no-interaction --no-progress --with-all-dependencies 'phasync/swerve:dev-main as 0.1.0-beta7' phasync/swerve-cakephp:@dev cakephp/authentication:^3.0
+# swerve-psr15 from its repository
+composer require --no-interaction --no-progress --with-all-dependencies 'phasync/swerve:^0.1' phasync/swerve-cakephp:@dev cakephp/authentication:^3.0
 cp -R ../overlay/. .
 grep -q swerve_routes config/routes.php || sed -i 's|^\(\s*\)\$routes->setRouteClass(DashedRoute::class);|&\n\1(require __DIR__ . "/swerve_routes.php")($routes);|' config/routes.php
 grep -q swerve_routes config/routes.php

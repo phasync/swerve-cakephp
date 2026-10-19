@@ -282,7 +282,7 @@ class SwerveTestController extends AppController
         return $this->send(['memory' => memory_get_usage() - 8 * gc_status()['buffer_size'], 'pid' => getmypid()]);
     }
 
-    /** Waits as an application would: sleep() blocks, but with phasync-ext it lets other requests run. */
+    /** Waits as an application would: sleep() blocks, but with ext-phasync it lets other requests run. */
     private function wait(float $seconds): void
     {
         extension_loaded('phasync') ? usleep((int)($seconds * 1e6)) : phasync::sleep($seconds);
